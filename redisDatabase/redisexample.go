@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -26,12 +27,27 @@ type User struct {
 	Email string `json:"email"`
 }
 
-func (a *App) createUserHandler(w http.ResponseWriter, r *http.Request) {
+func (a *App) CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 	var users User
 	if err := json.NewDecoder(r.Body).Decode(&users); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	// Validation
+	if strings.TrimSpace(users.Name) == "" {
+		http.Error(w, "name cannot be empty", http.StatusBadRequest)
+		return
+	}
+	if !strings.Contains(users.Email, "@") || strings.TrimSpace(users.Email) == "" {
+		http.Error(w, "invalid email", http.StatusBadRequest)
+		return
+	}
+	prefix := strings.TrimSuffix(users.Email, "@gmail.com")
+	if prefix == "" {
+		http.Error(w, "Email must contains a prefix before @gmail.com ", http.StatusBadRequest)
+		return
+	}
+
 	res, err := a.DB.Exec("INSERT INTO users (name , email) VALUES (? , ?)", users.Name, users.Email)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -111,7 +127,7 @@ func Redisexample() {
 		Ctx: context.Background(),
 	}
 	r := mux.NewRouter()
-	r.HandleFunc("/users", app.createUserHandler).Methods("POST")
+	r.HandleFunc("/users", app.CreateUserHandler).Methods("POST")
 	r.HandleFunc("/users/{id}", app.GetUserHandler).Methods("GET")
 	r.HandleFunc("/users/{id}", app.UpdateUserHandler).Methods("PUT")
 	r.HandleFunc("/users/{id}", app.DeleteUserHandler).Methods("DELETE")

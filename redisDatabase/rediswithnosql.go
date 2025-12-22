@@ -145,6 +145,7 @@ func Connectredis() (*RedisInstance, error) {
 	})
 	return &RedisInstance{Client: rdb}, nil
 }
+
 func connectMongo() (*MongoInstance, error) {
 	clientOPtions := options.Client().ApplyURI(os.Getenv("MONGO_URI"))
 	client, err := mongo.NewClient(clientOPtions)
