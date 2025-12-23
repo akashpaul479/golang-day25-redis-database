@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -90,26 +91,44 @@ func (a *App) UpdateUserHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	_, err := a.DB.Exec("UPDATE users SET name=?,email=? WHERE id=?", users.Name, users.Email, users.ID)
+	res, err := a.DB.Exec("UPDATE users SET name=?,email=? WHERE id=?", users.Name, users.Email, users.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		http.Error(w, "user not found", http.StatusNotFound)
 		return
 	}
 	jsonData, _ := json.Marshal(users)
 	a.RDB.Set(a.Ctx, fmt.Sprint(users.ID), jsonData, 10*time.Minute)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
+
 }
 func (a *App) DeleteUserHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
+	idInt, _ := strconv.Atoi(id)
 
-	_, err := a.DB.Exec("DELETE FROM users WHERE id=?", id)
+	res, err := a.DB.Exec("DELETE FROM users WHERE id=?", idInt)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		http.Error(w, "user not found", http.StatusNotFound)
+		return
+	}
 	a.RDB.Del(a.Ctx, id)
 
-	w.Write([]byte("User deleted"))
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("user deleted"))
 }
 func Redisexample() {
 	dsn := "root:root@tcp(127.0.0.1:3306)/go_users"
