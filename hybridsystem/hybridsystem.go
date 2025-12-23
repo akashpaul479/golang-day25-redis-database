@@ -55,14 +55,14 @@ func Connectredis1() (*RedisInstance1, error) {
 	})
 	return &RedisInstance1{Client: rdb}, nil
 }
-func connectMySQL1() (*MySQLInstance1, error) {
+func ConnectMySQL1() (*MySQLInstance1, error) {
 	db, err := sql.Open("mysql", os.Getenv("MYSQL_DSN"))
 	if err != nil {
 		return nil, err
 	}
 	return &MySQLInstance1{DB: db}, nil
 }
-func connectMongo1() (*MongoInstance1, error) {
+func ConnectMongo1() (*MongoInstance1, error) {
 	clientOPtions := options.Client().ApplyURI(os.Getenv("MONGO_URI"))
 	client, err := mongo.NewClient(clientOPtions)
 	if err != nil {
@@ -88,18 +88,18 @@ func CRUDoperations2() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	mySQLInstance, err := connectMySQL1()
+	mySQLInstance, err := ConnectMySQL1()
 	if err != nil {
 		log.Fatal(err)
 	}
-	mongoInstance, err := connectMongo1()
+	mongoInstance, err := ConnectMongo1()
 	if err != nil {
 		log.Fatal(err)
 	}
 	handle := &HybridHandler3{Mongo: mongoInstance, MySQL: mySQLInstance, Redis: redisInstance, Ctx: context.Background()}
 	r := mux.NewRouter()
 	// for MySQL routes
-	r.HandleFunc("/users", handle.createUserHandler3).Methods("POST")
+	r.HandleFunc("/users", handle.CreateUserHandler3).Methods("POST")
 	r.HandleFunc("/users/{id}", handle.GetUserHandler3).Methods("GET")
 	r.HandleFunc("/users/{id}", handle.UpdateUserHandler3).Methods("PUT")
 	r.HandleFunc("/users/{id}", handle.DeleteUserHandler3).Methods("DELETE")

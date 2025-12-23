@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -19,26 +20,61 @@ func (a *HybridHandler3) UpdateUserHandler3(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	_, err := a.MySQL.DB.Exec("UPDATE users SET name=?,email=? WHERE id=?", users.Name, users.Email, users.ID)
+	if err := ValidateUser(users); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"Error": err.Error()})
+		return
+	}
+	res, err := a.MySQL.DB.Exec("UPDATE users SET name=?,email=? WHERE id=?", users.Name, users.Email, users.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	jsonData, _ := json.Marshal(users)
+	rows, err := res.RowsAffected()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if rows == 0 {
+		http.Error(w, "user not found", http.StatusNotFound)
+		return
+	}
+	jsonData, err := json.Marshal(users)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
 	a.Redis.Client.Set(a.Ctx, fmt.Sprint(users.ID), jsonData, 10*time.Minute)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
 }
 func (a *HybridHandler3) DeleteUserHandler3(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
+	idInt, _ := strconv.Atoi(id)
 
-	_, err := a.MySQL.DB.Exec("DELETE FROM users WHERE id=?", id)
+	res, err := a.MySQL.DB.Exec("DELETE FROM users WHERE id=?", idInt)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if rows == 0 {
+		http.Error(w, "user not found", http.StatusNotFound)
+		return
+	}
+
 	a.Redis.Client.Del(a.Ctx, id)
 
-	w.Write([]byte("User deleted"))
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	w.Write([]byte("user deleted"))
 }
 
 // update and delete users using mongoDB with redis

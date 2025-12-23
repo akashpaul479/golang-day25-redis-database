@@ -3,8 +3,10 @@ package hybridsystem
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -12,11 +14,34 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+func ValidateUser(user User2) error {
+	if user.Email == "" {
+		return fmt.Errorf("email is invalid and empty")
+	}
+	if strings.TrimSpace(user.Name) == "" {
+		return fmt.Errorf("name is invalid and empty")
+	}
+	if !strings.HasSuffix(user.Email, "@gmail.com") {
+		return fmt.Errorf("email is invalid and does not contain @gmail.com")
+	}
+	prefix := strings.TrimSuffix(user.Email, "@gmail.com")
+	if prefix == "" {
+		return fmt.Errorf("email must contains a prefix before the @gmail.com ")
+	}
+	return nil
+}
+
 // create and get users for mysql Databases with redis
-func (a *HybridHandler3) createUserHandler3(w http.ResponseWriter, r *http.Request) {
+func (a *HybridHandler3) CreateUserHandler3(w http.ResponseWriter, r *http.Request) {
 	var users User2
 	if err := json.NewDecoder(r.Body).Decode(&users); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := ValidateUser(users); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"Error": err.Error()})
 		return
 	}
 	res, err := a.MySQL.DB.Exec("INSERT INTO users (name , email) VALUES (? , ?)", users.Name, users.Email)
@@ -24,9 +49,14 @@ func (a *HybridHandler3) createUserHandler3(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	id, _ := res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	users.ID = int(id)
-
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(users)
 }
 
@@ -49,7 +79,11 @@ func (a *HybridHandler3) GetUserHandler3(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "user not found", http.StatusNotFound)
 		return
 	}
-	jsonData, _ := json.Marshal(users)
+	jsonData, err := json.Marshal(users)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	a.Redis.Client.Set(a.Ctx, id, jsonData, 10*time.Minute)
 
 	w.Header().Set("Content-Type", "application/json")
