@@ -89,6 +89,22 @@ func (a *HybridHandler3) GetUserHandler3(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(jsonData)
 }
+func ValidateUser1(person Person) error {
+	if person.Email == "" {
+		return fmt.Errorf("email is invalid and empty")
+	}
+	if strings.TrimSpace(person.Name) == "" {
+		return fmt.Errorf("name is invalid and empty")
+	}
+	if !strings.HasSuffix(person.Email, "@gmail.com") {
+		return fmt.Errorf("email is invalid and does not contain @gmail.com")
+	}
+	prefix := strings.TrimSuffix(person.Email, "@gmail.com")
+	if prefix == "" {
+		return fmt.Errorf("email must contains a prefix before the @gmail.com ")
+	}
+	return nil
+}
 
 // create and Get users for mongodb with redis
 func (h *HybridHandler3) CreateUserHandlers4(w http.ResponseWriter, r *http.Request) {
@@ -97,10 +113,15 @@ func (h *HybridHandler3) CreateUserHandlers4(w http.ResponseWriter, r *http.Requ
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if err := ValidateUser1(persons); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"Error": err.Error()})
+		return
+	}
 	ctx, cancel := context.WithTimeout(h.Ctx, 5*time.Second)
 	defer cancel()
 
-	res, err := h.Mongo.Users.InsertOne(ctx, persons)
+	res, err := h.Mongo.Persons.InsertOne(ctx, persons)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -110,7 +131,10 @@ func (h *HybridHandler3) CreateUserHandlers4(w http.ResponseWriter, r *http.Requ
 	jsonData, _ := json.Marshal(persons)
 	h.Redis.Client.Set(h.Ctx, persons.ID.Hex(), jsonData, 10*time.Minute)
 
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(persons)
+	w.WriteHeader(http.StatusCreated)
+
 }
 func (h *HybridHandler3) GetUserHandler4(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
@@ -124,17 +148,25 @@ func (h *HybridHandler3) GetUserHandler4(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	log.Println("cache miss, querying MongoDB...")
-	objID, _ := primitive.ObjectIDFromHex(id)
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		http.Error(w, "invalid id format", http.StatusBadRequest)
+		return
+	}
 	var persons Person
 	ctx, cancel := context.WithTimeout(h.Ctx, 5*time.Second)
 	defer cancel()
 
-	err = h.Mongo.Users.FindOne(ctx, bson.M{"_id": objID}).Decode(&persons)
+	err = h.Mongo.Persons.FindOne(ctx, bson.M{"_id": objID}).Decode(&persons)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	jsondata, _ := json.Marshal(persons)
+	jsondata, err := json.Marshal(persons)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	h.Redis.Client.Set(h.Ctx, id, jsondata, 10*time.Minute)
 
 	w.Header().Set("Content-Type", "application/json")

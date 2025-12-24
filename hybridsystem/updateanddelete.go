@@ -87,6 +87,11 @@ func (h *HybridHandler3) UpdateUserHandler4(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if err := ValidateUser1(persons); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"Error": err.Error()})
+		return
+	}
 	objID, _ := primitive.ObjectIDFromHex(id)
 	ctx, cancel := context.WithTimeout(h.Ctx, 5*time.Second)
 	defer cancel()
@@ -96,8 +101,7 @@ func (h *HybridHandler3) UpdateUserHandler4(w http.ResponseWriter, r *http.Reque
 			"email": persons.Email,
 		},
 	}
-
-	res, err := h.Mongo.Users.UpdateOne(ctx, bson.M{"_id": objID}, update)
+	res, err := h.Mongo.Persons.UpdateOne(ctx, bson.M{"_id": objID}, update)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -107,7 +111,11 @@ func (h *HybridHandler3) UpdateUserHandler4(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	persons.ID = objID
-	jsonData, _ := json.Marshal(persons)
+	jsonData, err := json.Marshal(persons)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	h.Redis.Client.Set(h.Ctx, id, jsonData, 10*time.Minute)
 
 	w.Header().Set("content-Type", "application/json")
@@ -121,11 +129,17 @@ func (h *HybridHandler3) DeleteuserHandler4(w http.ResponseWriter, r *http.Reque
 	ctx, cancel := context.WithTimeout(h.Ctx, 5*time.Second)
 	defer cancel()
 
-	_, err := h.Mongo.Users.DeleteOne(ctx, bson.M{"_id": objID})
+	res, err := h.Mongo.Persons.DeleteOne(ctx, bson.M{"_id": objID})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if res.DeletedCount == 0 {
+		http.Error(w, "user not found", http.StatusNotFound)
+	}
+
 	h.Redis.Client.Del(h.Ctx, id)
+	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("user Deleted!"))
+
 }

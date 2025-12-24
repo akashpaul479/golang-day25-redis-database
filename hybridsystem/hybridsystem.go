@@ -24,9 +24,9 @@ type RedisInstance1 struct {
 	Client *redis.Client
 }
 type MongoInstance1 struct {
-	Client *mongo.Client
-	DB     *mongo.Database
-	Users  *mongo.Collection
+	Client  *mongo.Client
+	DB      *mongo.Database
+	Persons *mongo.Collection
 }
 
 type HybridHandler3 struct {
@@ -76,9 +76,9 @@ func ConnectMongo1() (*MongoInstance1, error) {
 	}
 	db := client.Database(os.Getenv("MONGO_DB"))
 	return &MongoInstance1{
-		Client: client,
-		DB:     db,
-		Users:  db.Collection("users"),
+		Client:  client,
+		DB:      db,
+		Persons: db.Collection("persons"),
 	}, nil
 }
 func CRUDoperations2() {
